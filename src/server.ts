@@ -2,6 +2,8 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { testConnection } from './config/database';
+import routes from './routes';
+import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
 
@@ -29,6 +31,10 @@ app.get('/health', async (req: Request, res: Response) => {
     timestamp: new Date().toISOString()
   });
 });
+
+app.use('/api', routes);
+
+app.use(errorHandler);
 
 const startServer = async () => {
   try {
