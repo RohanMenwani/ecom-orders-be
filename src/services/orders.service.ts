@@ -326,4 +326,159 @@ export class OrdersService {
     
     return rows.length > 0 ? (rows[0] as Order) : null;
   }
+
+   /**
+   * Cancel order and restore inventory
+   */
+  async cancelOrder(orderId: number, reason?: string): Promise<OrderWithDetails> {
+    const connection = await pool.getConnection();
+    
+    try {
+      await connection.beginTransaction();
+      
+      const [orderRows] = await connection.query<RowDataPacket[]>(
+        'SELECT * FROM orders WHERE id = ? FOR UPDATE',
+        [orderId]
+      );
+      
+      if (orderRows.length === 0) {
+        throw new AppError('Order not found', 404);
+      }
+      
+      const order = orderRows[0] as any;
+      
+      if (order.status === 'cancelled') {
+        throw new AppError('Order is already cancelled', 400);
+      }
+      
+      if (['delivered', 'shipped'].includes(order.status)) {
+        throw new AppError(`Cannot cancel ${order.status} order`, 400);
+      }
+      
+      // Get order items
+      const [items] = await connection.query<RowDataPacket[]>(
+        'SELECT * FROM order_items WHERE order_id = ?',
+        [orderId]
+      );
+      
+      for (const item of items as any[]) {
+        const [productRows] = await connection.query<RowDataPacket[]>(
+          'SELECT * FROM products WHERE id = ? FOR UPDATE',
+          [item.product_id]
+        );
+        
+        const product = productRows[0] as any;
+        const newStock = product.stock_quantity + item.quantity;
+        
+        await connection.query(
+          'UPDATE products SET stock_quantity = ? WHERE id = ?',
+          [newStock, item.product_id]
+        );
+        
+        await connection.query(
+          `INSERT INTO inventory_transactions 
+           (product_id, order_id, transaction_type, quantity_change, stock_after, notes)
+           VALUES (?, ?, 'return', ?, ?, ?)`,
+          [
+            item.product_id,
+            orderId,
+            item.quantity,
+            newStock,
+            `Returned from cancelled order ${order.order_number}`
+          ]
+        );
+      }
+      
+      const oldStatus = order.status;
+      const oldPaymentStatus = order.payment_status;
+      const newPaymentStatus = order.payment_status === 'paid' ? 'refunded' : order.payment_status;
+      
+      await connection.query(
+        'UPDATE orders SET status = ?, payment_status = ? WHERE id = ?',
+        ['cancelled', newPaymentStatus, orderId]
+      );
+      
+      await connection.query(
+        `INSERT INTO audit_logs 
+         (order_id, action, old_value, new_value, changed_by)
+         VALUES (?, 'status_change', ?, ?, ?)`,
+        [orderId, oldStatus, 'cancelled', 'admin']
+      );
+      
+      if (newPaymentStatus !== oldPaymentStatus) {
+        await connection.query(
+          `INSERT INTO audit_logs 
+           (order_id, action, old_value, new_value, changed_by)
+           VALUES (?, 'payment_status_change', ?, ?, ?)`,
+          [orderId, oldPaymentStatus, newPaymentStatus, 'admin']
+        );
+      }
+      
+      if (reason) {
+        await connection.query(
+          `INSERT INTO audit_logs 
+           (order_id, action, old_value, new_value, changed_by)
+           VALUES (?, 'cancellation_reason', NULL, ?, 'admin')`,
+          [orderId, reason]
+        );
+      }
+      
+      await connection.commit();
+      
+      const cancelledOrder = await this.getOrderById(orderId);
+      return cancelledOrder!;
+      
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+  
+  /**
+   * Update order status
+   */
+  async updateOrderStatus(orderId: number, newStatus: OrderStatus): Promise<OrderWithDetails> {
+    const connection = await pool.getConnection();
+    
+    try {
+      await connection.beginTransaction();
+      
+      const [orderRows] = await connection.query<RowDataPacket[]>(
+        'SELECT * FROM orders WHERE id = ? FOR UPDATE',
+        [orderId]
+      );
+      
+      if (orderRows.length === 0) {
+        throw new AppError('Order not found', 404);
+      }
+      
+      const order = orderRows[0] as any;
+      const oldStatus = order.status;
+      
+      await connection.query(
+        'UPDATE orders SET status = ? WHERE id = ?',
+        [newStatus, orderId]
+      );
+      
+      await connection.query(
+        `INSERT INTO audit_logs 
+         (order_id, action, old_value, new_value, changed_by)
+         VALUES (?, 'status_change', ?, ?, ?)`,
+        [orderId, oldStatus, newStatus, 'admin']
+      );
+      
+      await connection.commit();
+      
+      const updatedOrder = await this.getOrderById(orderId);
+      return updatedOrder!;
+      
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
 }

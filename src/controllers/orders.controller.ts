@@ -91,3 +91,36 @@ export const getOrderByNumber = asyncHandler(async (req: Request, res: Response)
     data: order
   });
 });
+
+export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  const { reason } = req.body;
+  
+  const order = await ordersService.cancelOrder(id, reason);
+  
+  res.json({
+    success: true,
+    data: order,
+    message: 'Order cancelled successfully'
+  });
+});
+
+export const updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  const { status } = req.body;
+  
+  if (!status) {
+    return res.status(400).json({
+      success: false,
+      error: 'status is required'
+    });
+  }
+  
+  const order = await ordersService.updateOrderStatus(id, status);
+  
+  res.json({
+    success: true,
+    data: order,
+    message: 'Order status updated successfully'
+  });
+});

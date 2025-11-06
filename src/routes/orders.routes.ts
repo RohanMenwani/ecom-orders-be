@@ -8,5 +8,7 @@ router.get('/number/:orderNumber', ordersController.getOrderByNumber);
 router.get('/:id', ordersController.getOrderById);
 router.post('/', ordersController.createOrder);
 router.post('/bulk', ordersController.createBulkOrders);
+router.put('/:id/status', ordersController.updateOrderStatus);
+router.post('/:id/cancel', ordersController.cancelOrder);
 
 export default router;
