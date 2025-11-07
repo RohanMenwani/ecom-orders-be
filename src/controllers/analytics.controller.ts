@@ -13,20 +13,20 @@ export const getDashboardMetrics = asyncHandler(async (req: Request, res: Respon
   });
 });
 
-export const getCustomerLifetimeValue = asyncHandler(async (req: Request, res: Response) => {
-  const data = await analyticsService.getCustomerLifetimeValue();
+// export const getCustomerLifetimeValue = asyncHandler(async (req: Request, res: Response) => {
+//   const data = await analyticsService.getCustomerLifetimeValue();
   
-  res.json({
-    success: true,
-    data
-  });
-});
+//   res.json({
+//     success: true,
+//     data
+//   });
+// });
 
-export const getProductPerformance = asyncHandler(async (req: Request, res: Response) => {
-  const data = await analyticsService.getProductPerformance();
+// export const getProductPerformance = asyncHandler(async (req: Request, res: Response) => {
+//   const data = await analyticsService.getProductPerformance();
   
-  res.json({
-    success: true,
-    data
-  });
-});
+//   res.json({
+//     success: true,
+//     data
+//   });
+// });
